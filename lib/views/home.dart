@@ -32,14 +32,20 @@ class _HomePageState extends State<HomePage> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _measurableDoneController = TextEditingController();
 
+  /// A starting point offset of time from today, increments and decrements by 7 days.
+  int _startingPointOfTime = 0;
+
   Color _circleColor(int i, Habit h) {
-    if (h.type == HabitType.yesOrNo) {      
-      return h.daysDoneYesNo.contains(hiveDateFormat.format(DateTime.now().add(Duration(days: i))))
+    String _dateTimeToFind = hiveDateFormat.format(DateTime.now().add(Duration(days: _startingPointOfTime + i)));
+    if (h.type == HabitType.yesOrNo) {   
+      return h.daysDoneYesNo.contains(_dateTimeToFind)
         ? maximumPurple
         : darkGray;
     } else {
-      if (h.daysDoneMeasurable[hiveDateFormat.format(DateTime.now().add(Duration(days: i)))] != null) {
-        if (h.daysDoneMeasurable[hiveDateFormat.format(DateTime.now().add(Duration(days: i)))]! >= h.measurableDone) {
+      int? _value = h.daysDoneMeasurable[_dateTimeToFind];
+
+      if (_value != null) {
+        if (_value >= h.measurableDone) {
           return maximumPurple;
         } else {
           return darkGray;
@@ -51,7 +57,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   String _tileTitle(Habit h) {
-    return h.name + (h.type == HabitType.yesOrNo ? ' (Yes or No)' : ' (Measurable ${h.measurableDone})');
+    return h.name + (h.type == HabitType.yesOrNo ? ' (Yes or No)' : ' (Measurable: ${h.measurableDone} times a day)');
   }
 
   Center _circleNumber(int i, Habit h) {
@@ -60,12 +66,55 @@ class _HomePageState extends State<HomePage> {
         child: Text(''),
       );
     } else {
+      String _dateTime = hiveDateFormat.format(DateTime.now().add(Duration(days: _startingPointOfTime + i)));
+      String _value = h.daysDoneMeasurable[_dateTime]?.toString() ?? '0';
+
       return Center(
-        child: Text(
-          h.daysDoneMeasurable[hiveDateFormat.format(DateTime.now().add(Duration(days: i)))]?.toString() ?? '0'
-        ),
+        child: Text(_value),
       );
     }
+  }
+
+  List<MouseRegion> _generateStartTag() {
+    return [
+      MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: SizedBox(
+          width: (MediaQuery.of(context).size.width - 40) / 9,
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            iconSize: 20,
+            color: babyPowderWhite,
+            onPressed: () {
+              setState(() {
+                _startingPointOfTime -= 7;
+              });
+            },
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<MouseRegion> _generateEndTag() {
+    return [
+      MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: SizedBox(
+          width: (MediaQuery.of(context).size.width - 40) / 9,
+          child: IconButton(
+            icon: const Icon(Icons.arrow_forward),
+            iconSize: 20,
+            color: babyPowderWhite,
+            onPressed: () {
+              setState(() {
+                _startingPointOfTime += 7;
+              });
+            },
+          ),
+        ),
+      ),
+    ];
   }
 
   String? _newMeasurableValueValidator(String? input) {
@@ -76,7 +125,7 @@ class _HomePageState extends State<HomePage> {
     try {
       int _numberSign = int.parse(input).sign;
 
-      if (_numberSign == -1) {
+      if (_numberSign < 0) {
         return 'The value cannot be less than 0';
       }
     } on Exception catch (_) {
@@ -95,6 +144,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: const Text('Habits'),
         actions: [
@@ -172,90 +222,100 @@ class _HomePageState extends State<HomePage> {
                             ),
                             const SizedBox(height: 10),
                             Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: List<GestureDetector>.generate(7, (i) {
-                                return GestureDetector(
-                                  onTap: () {
-                                    if (_currentHabit.type == HabitType.yesOrNo) {
-                                      String _dateString = hiveDateFormat.format(DateTime.now().add(Duration(days: i)));
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: _generateStartTag() + List<MouseRegion>.generate(7, (i) {
+                                return MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      if (_currentHabit.type == HabitType.yesOrNo) {
+                                        String _dateString = hiveDateFormat.format(DateTime.now().add(Duration(days: _startingPointOfTime + i)));
 
-                                      if (_currentHabit.daysDoneYesNo.contains(_dateString)) {
-                                        _currentHabit.daysDoneYesNo.remove(_dateString);
+                                        if (_currentHabit.daysDoneYesNo.contains(_dateString)) {
+                                          _currentHabit.daysDoneYesNo.remove(_dateString);
+                                        } else {
+                                          _currentHabit.daysDoneYesNo.add(_dateString);
+                                        }
+
+                                        setState(() {
+                                          _box.putAt(index, _currentHabit);
+                                        });
                                       } else {
-                                        _currentHabit.daysDoneYesNo.add(_dateString);
-                                      }
-
-                                      setState(() {
-                                        _box.putAt(index, _currentHabit);
-                                      });
-                                    } else {
-                                      showDialog(
-                                        context: context,
-                                        builder: (context) => AlertDialog(
-                                          backgroundColor: darkGray,
-                                          content: Form(
-                                            key: _formKey,
-                                            autovalidateMode: AutovalidateMode.always,
-                                            child: TextFormField(
-                                              controller: _measurableDoneController,
-                                              validator: _newMeasurableValueValidator,
-                                              decoration: inputBoxStyle('New amount', 'New measurable habit value'),
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) => AlertDialog(
+                                            backgroundColor: darkGray,
+                                            content: Form(
+                                              key: _formKey,
+                                              autovalidateMode: AutovalidateMode.always,
+                                              child: TextFormField(
+                                                controller: _measurableDoneController,
+                                                validator: _newMeasurableValueValidator,
+                                                decoration: inputBoxStyle('New amount', 'New measurable habit value'),
+                                              ),
                                             ),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              child: const Text('Exit'),
-                                              onPressed: () {
-                                                _measurableDoneController.clear();
-                                                Navigator.pop(context);
-                                              },
-                                            ),
-                                            TextButton(
-                                              child: const Text('Submit'),
-                                              onPressed: () {
-                                                FormState? _state = _formKey.currentState;
-
-                                                if (_state != null && _state.validate()) {
-                                                  _currentHabit.daysDoneMeasurable.update(
-                                                    hiveDateFormat.format(DateTime.now().add(Duration(days: i))),
-                                                    (_) => int.parse(_measurableDoneController.text),
-                                                    ifAbsent: () => int.parse(_measurableDoneController.text),
-                                                  );
-
-                                                  setState(() {
-                                                    _box.putAt(index, _currentHabit);
-                                                  });
-
+                                            actions: [
+                                              TextButton(
+                                                child: const Text('Exit'),
+                                                onPressed: () {
+                                                  _measurableDoneController.clear();
                                                   Navigator.pop(context);
+                                                },
+                                              ),
+                                              TextButton(
+                                                child: const Text('Submit'),
+                                                onPressed: () {
+                                                  FormState? _state = _formKey.currentState;
+                                
+                                                  if (_state != null && _state.validate()) {
+                                                    _currentHabit.daysDoneMeasurable.update(
+                                                      hiveDateFormat.format(DateTime.now().add(Duration(days: _startingPointOfTime + i))),
+                                                      (_) => int.parse(_measurableDoneController.text),
+                                                      ifAbsent: () => int.parse(_measurableDoneController.text),
+                                                    );
+                                
+                                                    setState(() {
+                                                      _box.putAt(index, _currentHabit);
+                                                    });
+                                
+                                                    Navigator.pop(context);
+                                                  }
                                                 }
-                                              }
-                                            )
-                                          ],
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  child: SizedBox(
-                                    width: (MediaQuery.of(context).size.width - 40) / 7,
-                                    child: Column(
-                                      children: [
-                                        Text(_onlyDate.format(DateTime.now().add(Duration(days: i)))),
-                                        const SizedBox(height: 10),
-                                        Container(
-                                          width: 30,
-                                          height: 30,
-                                          decoration: BoxDecoration(
-                                            color: _circleColor(i, _currentHabit),
-                                            shape: BoxShape.circle,
-                                            border: Border.all(color: maximumPurple),
+                                              )
+                                            ],
                                           ),
-                                          child: _circleNumber(i, _currentHabit),
-                                        ),
-                                      ],
+                                        );
+                                      }
+                                    },
+                                    child: SizedBox(
+                                      width: (MediaQuery.of(context).size.width - 40) / 9,
+                                      child: Column(
+                                        children: [
+                                          Text(
+                                            _onlyDate.format(DateTime.now().add(Duration(days: _startingPointOfTime + i))),
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                            )
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Container(
+                                            width: 25,
+                                            height: 25,
+                                            decoration: BoxDecoration(
+                                              color: _circleColor(i, _currentHabit),
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: maximumPurple),
+                                            ),
+                                            child: _circleNumber(i, _currentHabit),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );
-                              }).toList(),
+                              }).toList() + _generateEndTag(),
                             ),
                           ],
                         ),
